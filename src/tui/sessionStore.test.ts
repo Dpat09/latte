@@ -286,6 +286,53 @@ describe("the status tick", () => {
     expect(store.getSnapshot().session?.at).toEqual(now)
   })
 
+  const ticking = () => {
+    const fake = fakeIO()
+    let clock = now
+    const io: SessionIO = { ...fake.io, now: () => clock }
+    return { fake, io, advance: (seconds: number) => { clock = new Date(clock.getTime() + seconds * 1000) } }
+  }
+
+  const tick = async (store: ReturnType<typeof createSessionStore>, fake: ReturnType<typeof fakeIO>, info: CaffeinateInfo) => {
+    let notified = 0
+    const unsubscribe = store.subscribe(() => notified++)
+    const stop = store.poll()
+    jest.advanceTimersByTime(1000)
+    await fake.finishDetect(info)
+    stop()
+    unsubscribe()
+    return notified
+  }
+
+  test("skips a status check that would draw the same screen, so Ink does not re-render", async () => {
+    const { fake, io, advance } = ticking()
+    const running = session({ startTime: secondsAgo(60) })
+    const store = createSessionStore(io, running)
+
+    advance(30)
+    expect(await tick(store, fake, { ...running })).toBe(0)
+    expect(store.getSnapshot().session?.at).toEqual(now)
+  })
+
+  test("redraws when the minute shown changes", async () => {
+    const { fake, io, advance } = ticking()
+    const running = session({ startTime: secondsAgo(60) })
+    const store = createSessionStore(io, running)
+
+    advance(60)
+    expect(await tick(store, fake, { ...running })).toBe(1)
+    expect(store.getSnapshot().session?.at).toEqual(new Date(now.getTime() + 60_000))
+  })
+
+  test("redraws when the time left changes color within a minute", async () => {
+    const { fake, io, advance } = ticking()
+    const timed = session({ startTime: secondsAgo(1120), duration: 1250 })
+    const store = createSessionStore(io, timed)
+
+    advance(6)
+    expect(await tick(store, fake, { ...timed })).toBe(1)
+  })
+
   test("discards a detect issued before a change", async () => {
     const fake = fakeIO()
     const store = createSessionStore(fake.io, session())
