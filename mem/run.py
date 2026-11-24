@@ -64,11 +64,27 @@ def main():
                 print(f"{t:6.0f} rss={m[0]:.1f} fp={m[1]:.1f}", flush=True)
                 nxt += every
     finally:
+        # Keep reading while the child exits: on macOS a child blocks in exit
+        # until its terminal output drains, so waitpid would hang forever.
         try:
-            os.kill(pid, signal.SIGTERM); time.sleep(0.3); os.kill(pid, signal.SIGKILL)
+            os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
-        os.waitpid(pid, 0)
+        deadline = time.time() + 3
+        while True:
+            done, _ = os.waitpid(pid, os.WNOHANG)
+            if done:
+                break
+            if time.time() > deadline:
+                os.kill(pid, signal.SIGKILL)
+                deadline = float("inf")
+            if select.select([fd], [], [], 0.05)[0]:
+                try:
+                    buf = (buf + os.read(fd, 65536))[-20000:]
+                except OSError:
+                    os.waitpid(pid, 0)
+                    break
+        os.close(fd)
     if os.environ.get("SHOW_SCREEN"):
         sys.stderr.write(re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", buf.decode("utf-8", "replace"))[-800:] + "\n")
 
