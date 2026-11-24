@@ -3,6 +3,7 @@ import type { CaffeinateInfo, TuiResult } from "../types/index.ts"
 import type { StartSpec } from "../services/Caffeinate.ts"
 import { parseFlagString, type Flag } from "../utils/flags.ts"
 import { initialFlagSet } from "../utils/resolveFlags.ts"
+import { sameClock, sessionClock } from "./clock.ts"
 import { planChange, type Apply, type Change, type Plan, type Refused, type Request } from "./changes.ts"
 
 export interface SessionIO {
@@ -48,6 +49,17 @@ export interface SessionStore {
 interface Slot {
   change: Change | Apply | "resolving"
   settle: (outcome: Outcome) => void
+}
+
+/**
+ * Whether a fresh status check would draw the same screen as the one shown.
+ * Skipping those writes keeps Ink from re-rendering on every one-second check.
+ */
+const looksTheSame = (shown: Observed, next: Observed): boolean => {
+  const a = shown.info, b = next.info
+  return a.pid === b.pid && a.flags === b.flags && a.startTime.getTime() === b.startTime.getTime() &&
+    a.duration === b.duration && a.watching?.pid === b.watching?.pid && a.watching?.name === b.watching?.name &&
+    sameClock(sessionClock(a, shown.at), sessionClock(b, next.at))
 }
 
 const unexpected = (e: unknown) => `Unexpected error: ${e instanceof Error ? e.message : String(e)}`
@@ -169,7 +181,10 @@ export const createSessionStore = (io: SessionIO, initial: CaffeinateInfo | null
         if (running || snapshot.session === null) return
         const issued = sessionVersion
         void io.detect().then((info) => {
-          if (sessionVersion === issued) writeSession(info && { info, at: io.now() })
+          if (sessionVersion !== issued) return
+          const at = io.now()
+          if (info && snapshot.session && looksTheSame(snapshot.session, { info, at })) return
+          writeSession(info && { info, at })
         })
       }, 1000)
       return () => clearInterval(id)

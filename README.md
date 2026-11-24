@@ -139,7 +139,7 @@ latte status
 latte
 ```
 
-In a terminal, `latte` with no arguments opens a live dashboard. It updates every second.
+In a terminal, `latte` with no arguments opens a live dashboard. It checks the session every second and shows times to the minute, so the screen redraws when the minute changes.
 
 - **o** turns latte on.
 - **x** turns latte off.

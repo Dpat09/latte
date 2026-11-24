@@ -921,7 +921,7 @@ describe("App", () => {
     expect(lastFrame()).toContain("Mac and screen stay awake")
   })
 
-  test("the first frame after a restart shows 0s and the new flags", async () => {
+  test("the first frame after a restart shows under a minute and the new flags", async () => {
     const { onStart } = recordStarts()
     const { frames, stdin } = render(
       <App onResolveWatch={unresolved} initialInfo={activeInfo} onStart={onStart} onStop={noop} onDetect={async () => activeInfo} />,
@@ -930,7 +930,7 @@ describe("App", () => {
     stdin.write("s")
     await wait()
 
-    expect(frames.find((frame) => frame.includes("Mac and screen stay awake"))).toContain("Running for 0s")
+    expect(frames.find((frame) => frame.includes("Mac and screen stay awake"))).toContain("Running for <1m")
   })
 
   test("a status detect that started before a change does not overwrite it", async () => {
